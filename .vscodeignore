@@ -1,0 +1,6 @@
+.github/**
+tools/**
+.gitignore
+**/*.vsix
+install.ps1
+install.cmd

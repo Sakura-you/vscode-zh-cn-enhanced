@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # tag 与 package.json 版本不一致时 vsce 会打出错版本号，提前拦住
+      - name: Check version matches tag
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "package.json 版本 $PKG 与 tag $TAG 不一致"; exit 1
+          fi
+
+      - name: Package extension
+        run: npx --yes @vscode/vsce package --out "${{ github.event.repository.name }}-${{ github.ref_name }}.vsix"
+
+      # 校验产物里的清单版本与 tag 一致，避免再次出现历史资产与 HEAD 不同步
+      - name: Verify vsix manifest
+        run: |
+          unzip -p *.vsix extension/package.json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const p=JSON.parse(s);console.log('vsix version',p.version,'displayName',p.displayName);if('v'+p.version!=='${{ github.ref_name }}')process.exit(1)})"
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.vsix
+            install.cmd
+            install.ps1
+          body_path: .github/release-notes.md
